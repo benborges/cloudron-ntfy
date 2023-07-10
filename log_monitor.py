@@ -50,15 +50,30 @@ class LogFileHandler(FileSystemEventHandler):
                 content = ''.join(lines)
                 events = self.extract_events(content, log_file)
                 logger.info(f'Found {len(events)} events in log file: {log_file}')
-                for event_content, filename in events:
+                for event_content, timestamp in events:
                     if any(keyword in event_content for keyword in KEYWORDS):
-                        logger.info(f'Sending webhook for event in {filename}:\n{event_content}\n')
-                        send_webhook(event_content)
+                        logger.info(f'Triggering webhook for event in {log_file}')
+                        self.trigger_webhook(event_content, log_file, timestamp)
 
     def extract_events(self, content, log_file):
         events = re.split(TIMESTAMP_PATTERN, content)
         events = [event.strip() for event in events if event.strip()]
-        return [(event, log_file) for event in events]
+        return [(event, self.extract_timestamp(event), log_file) for event in events]
+
+    def extract_timestamp(self, event):
+        timestamp_match = re.search(TIMESTAMP_PATTERN, event)
+        if timestamp_match:
+            return timestamp_match.group()
+        return ''
+
+    def trigger_webhook(self, event_content, log_file, timestamp):
+        url = WEBHOOK_URL
+        data = {'log_directory': log_file, 'event': event_content, 'timestamp': timestamp}
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            logger.info(f'Webhook triggered successfully for event in {log_file}')
+        else:
+            logger.error(f'Failed to trigger webhook for event in {log_file}')
 
 
 def monitor_logs():
@@ -74,17 +89,6 @@ def monitor_logs():
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
-
-
-def send_webhook(content):
-    payload = {
-        'log_content': content
-    }
-    response = requests.post(WEBHOOK_URL, json=payload)
-    if response.status_code == 200:
-        logger.info('Webhook sent successfully.')
-    else:
-        logger.error('Failed to send webhook.')
 
 
 if __name__ == '__main__':
