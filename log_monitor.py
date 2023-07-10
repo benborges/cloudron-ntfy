@@ -20,7 +20,7 @@ LOG_DIRECTORIES = os.getenv('LOG_DIRECTORIES').split(',')
 KEYWORDS = os.getenv('KEYWORDS').split(',')
 
 # Regular expression pattern to match timestamp
-TIMESTAMP_PATTERN = r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
+TIMESTAMP_PATTERN = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z'
 
 # Maximum number of lines to read from each log file
 MAX_LINES = int(os.getenv('MAX_LINES'))
@@ -50,15 +50,19 @@ class LogFileHandler(FileSystemEventHandler):
                 content = ''.join(lines)
                 events = self.extract_events(content, log_file)
                 logger.info(f'Found {len(events)} events in log file: {log_file}')
-                for event_content, timestamp in events:
-                    if any(keyword in event_content for keyword in KEYWORDS):
-                        logger.info(f'Triggering webhook for event in {log_file}')
-                        self.trigger_webhook(event_content, log_file, timestamp)
+                for event_data in events:
+                    self.trigger_webhook(event_data)
 
     def extract_events(self, content, log_file):
-        events = re.split(TIMESTAMP_PATTERN, content)
-        events = [event.strip() for event in events if event.strip()]
-        return [(event, self.extract_timestamp(event), log_file) for event in events]
+        events = re.findall(f'{TIMESTAMP_PATTERN} (.+)', content)
+        return [
+            {
+                'log_directory': log_file,
+                'event': event.strip(),
+                'timestamp': self.extract_timestamp(event)
+            }
+            for event in events
+        ]
 
     def extract_timestamp(self, event):
         timestamp_match = re.search(TIMESTAMP_PATTERN, event)
@@ -66,14 +70,13 @@ class LogFileHandler(FileSystemEventHandler):
             return timestamp_match.group()
         return ''
 
-    def trigger_webhook(self, event_content, log_file, timestamp):
+    def trigger_webhook(self, event_data):
         url = WEBHOOK_URL
-        data = {'log_directory': log_file, 'event': event_content, 'timestamp': timestamp}
-        response = requests.post(url, json=data)
+        response = requests.post(url, json=event_data)
         if response.status_code == 200:
-            logger.info(f'Webhook triggered successfully for event in {log_file}')
+            logger.info(f'Webhook triggered successfully for event in {event_data["log_directory"]}')
         else:
-            logger.error(f'Failed to trigger webhook for event in {log_file}')
+            logger.error(f'Failed to trigger webhook for event in {event_data["log_directory"]}')
 
 
 def monitor_logs():
