@@ -48,17 +48,17 @@ class LogFileHandler(FileSystemEventHandler):
                 lines = file.readlines()
                 lines = lines[-MAX_LINES:]  # Read only the last MAX_LINES lines
                 content = ''.join(lines)
-                events = self.extract_events(content)
-                logger.info(f'Found {len(events)} events in log file')
-                for event_content in events:
+                events = self.extract_events(content, log_file)
+                logger.info(f'Found {len(events)} events in log file: {log_file}')
+                for event_content, filename in events:
                     if any(keyword in event_content for keyword in KEYWORDS):
-                        logger.info(f'Sending webhook for event:\n{event_content}\n')
+                        logger.info(f'Sending webhook for event in {filename}:\n{event_content}\n')
                         send_webhook(event_content)
 
-    def extract_events(self, content):
+    def extract_events(self, content, log_file):
         events = re.split(TIMESTAMP_PATTERN, content)
         events = [event.strip() for event in events if event.strip()]
-        return events
+        return [(event, log_file) for event in events]
 
 
 def monitor_logs():
