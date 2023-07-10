@@ -20,7 +20,7 @@ LOG_DIRECTORIES = os.getenv('LOG_DIRECTORIES').split(',')
 KEYWORDS = os.getenv('KEYWORDS').split(',')
 
 # Regular expression pattern to match timestamp
-TIMESTAMP_PATTERN = r'\w+ \d{1,2} \d{2}:\d{2}:\d{2}'
+TIMESTAMP_PATTERN = r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}'
 
 # Maximum number of lines to read from each log file
 MAX_LINES = int(os.getenv('MAX_LINES'))
@@ -50,21 +50,14 @@ class LogFileHandler(FileSystemEventHandler):
                 content = ''.join(lines)
                 events = self.extract_events(content)
                 logger.info(f'Found {len(events)} events in log file')
-                for timestamp, event_content in events.items():
+                for event_content in events:
                     if any(keyword in event_content for keyword in KEYWORDS):
                         logger.info(f'Sending webhook for event:\n{event_content}\n')
                         send_webhook(event_content)
 
     def extract_events(self, content):
-        events = {}
-        timestamps = re.findall(TIMESTAMP_PATTERN, content)
-        for timestamp in timestamps:
-            event_start = content.find(timestamp)
-            event_end = content.find(timestamp, event_start + 1)
-            if event_end == -1:
-                event_end = len(content)
-            event_content = content[event_start:event_end].strip()
-            events[timestamp] = event_content
+        events = re.split(TIMESTAMP_PATTERN, content)
+        events = [event.strip() for event in events if event.strip()]
         return events
 
 
