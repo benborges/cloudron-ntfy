@@ -1,5 +1,7 @@
 import os
 import requests
+import re
+from datetime import datetime
 from dotenv import load_dotenv
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -16,14 +18,34 @@ LOG_DIRECTORIES = os.getenv('LOG_DIRECTORIES').split(',')
 # Keywords from environment variable
 KEYWORDS = os.getenv('KEYWORDS').split(',')
 
+# Regular expression pattern to match timestamp
+TIMESTAMP_PATTERN = r'\w+ \d{1,2} \d{2}:\d{2}:\d{2}'
+
 class LogFileHandler(FileSystemEventHandler):
+    def __init__(self):
+        self.log_entries = {}
+
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('.log'):
             log_file = event.src_path
             with open(log_file, 'r') as file:
                 content = file.read()
-                if any(keyword in content for keyword in KEYWORDS):
-                    send_webhook(content)
+                events = self.extract_events(content)
+                for timestamp, event_content in events.items():
+                    if any(keyword in event_content for keyword in KEYWORDS):
+                        send_webhook(event_content)
+
+    def extract_events(self, content):
+        events = {}
+        timestamps = re.findall(TIMESTAMP_PATTERN, content)
+        for timestamp in timestamps:
+            event_start = content.find(timestamp)
+            event_end = content.find(timestamp, event_start + 1)
+            if event_end == -1:
+                event_end = len(content)
+            event_content = content[event_start:event_end].strip()
+            events[timestamp] = event_content
+        return events
 
 
 def monitor_logs():
