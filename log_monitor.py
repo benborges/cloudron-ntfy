@@ -1,7 +1,7 @@
 import os
 import requests
 import re
-from datetime import datetime
+import datetime
 from dotenv import load_dotenv
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -21,6 +21,13 @@ KEYWORDS = os.getenv('KEYWORDS').split(',')
 # Regular expression pattern to match timestamp
 TIMESTAMP_PATTERN = r'\w+ \d{1,2} \d{2}:\d{2}:\d{2}'
 
+# Maximum number of lines to read from each log file
+MAX_LINES = int(os.getenv('MAX_LINES'))
+
+# Time threshold for excluding logs older than a week
+TIME_THRESHOLD = datetime.datetime.now() - datetime.timedelta(days=int(os.getenv('TIME_THRESHOLD')))
+
+
 class LogFileHandler(FileSystemEventHandler):
     def __init__(self):
         self.log_entries = {}
@@ -29,7 +36,9 @@ class LogFileHandler(FileSystemEventHandler):
         if not event.is_directory and event.src_path.endswith('.log'):
             log_file = event.src_path
             with open(log_file, 'r') as file:
-                content = file.read()
+                lines = file.readlines()
+                lines = lines[-MAX_LINES:]  # Read only the last MAX_LINES lines
+                content = ''.join(lines)
                 events = self.extract_events(content)
                 for timestamp, event_content in events.items():
                     if any(keyword in event_content for keyword in KEYWORDS):
